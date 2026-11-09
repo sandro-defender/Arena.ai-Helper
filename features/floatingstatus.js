@@ -123,7 +123,8 @@
     if (!label) return;
 
     let state;
-    if (runtime.captchaDetected) state = '🛑 Captcha — paused';
+    if (runtime.paused) state = '⏸ Paused';
+    else if (runtime.captchaDetected) state = '🛑 Captcha — paused';
     else if (runtime.safetyNotice) state = '🟠 Safety limit reached';
     else if (runtime.isAssistantResponding) state = '🟣 Generating';
     else if (settings.stopAfterThis) state = '🟡 Stopping after this';

@@ -25,14 +25,34 @@
   let savedAutoContinue = null;
 
   // ------ Detection heuristics ------
-  // Returns a string reason if a captcha-like element is found, else null.
-  function detectCaptcha() {
-    // 1) iframes from known captcha providers
+  // Arena injects Google's invisible reCAPTCHA iframe on every page. It is 0x0,
+  // visibility:hidden, and is NOT a challenge. Treating it as one put the helper
+  // into permanent safe mode, which disabled auto-send and auto-continue.
+  function frameIsVisible(f) {
+    if (!f) return false;
+    const rect = f.getBoundingClientRect();
+    if (rect.width < 40 || rect.height < 40) return false;
+    const style = window.getComputedStyle(f);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (Number(style.opacity || 1) < 0.05) return false;
+    if (f.getAttribute('aria-hidden') === 'true') return false;
+    return true;
+  }
+
+  function isCaptchaIframe(f) {
+    if (!frameIsVisible(f)) return false;
+    const src = (f.src || '').toLowerCase();
+    const title = (f.title || '').toLowerCase();
+
+    // Invisible reCAPTCHA / v3 badge: present on every Arena page, never a challenge.
+    if (src.includes('google.com/recaptcha') || src.includes('recaptcha.net')) {
+      if (src.includes('size=invisible') || src.includes('badge=')) return false;
+    }
+
     const iframeSrcs = [
       'challenges.cloudflare.com',
       'recaptcha.net',
       'google.com/recaptcha',
-      'www.google.com/recaptcha',
       'hcaptcha.com',
       'newassets.hcaptcha.com',
       'api.arkoselabs.com',
@@ -41,24 +61,22 @@
       'turnstile',
       '/cdn-cgi/challenge-platform'
     ];
-    const frames = document.querySelectorAll('iframe');
-    for (const f of frames) {
-      if (!f.offsetParent && f.style.display === 'none') continue; // hidden iframe skip
-      const src = (f.src || '').toLowerCase();
-      for (const needle of iframeSrcs) {
-        if (src.includes(needle.toLowerCase())) return `captcha iframe (${needle})`;
-      }
-      const title = (f.title || '').toLowerCase();
-      if (title.includes('captcha') || title.includes('verify') || title.includes('challenge')) {
-        return 'captcha iframe (title)';
+    if (iframeSrcs.some((needle) => src.includes(needle))) return true;
+    if (title.includes('captcha') || title.includes('verify') || title.includes('challenge')) return true;
+    return false;
+  }
+
+  // Returns a string reason if a captcha-like element is found, else null.
+  function detectCaptcha() {
+    // 1) Visible captcha iframes from known providers. A visible, properly sized
+    // widget is a strong signal; hidden/invisible anchors are ignored.
+    for (const f of document.querySelectorAll('iframe')) {
+      if (isCaptchaIframe(f)) {
+        return `captcha iframe (${(f.src || f.title || 'challenge').slice(0, 80)})`;
       }
     }
 
     // 2) Common captcha widgets embedded directly (div scripts)
-    const widgetClasses = [
-      'g-recaptcha', 'h-captcha', 'cf-turnstile', 'arkose-captcha',
-      'data-captcha', '[id*="captcha"]', '[class*="captcha"]', '[class*="challenge"]'
-    ];
     for (const sel of ['.g-recaptcha', '.h-captcha', '.cf-turnstile', '.arkose-captcha', '[id*="captcha" i]', '[class*="captcha" i]', '[class*="turnstile" i]']) {
       const el = document.querySelector(sel);
       if (el && isElementVisible(el)) {
@@ -66,7 +84,9 @@
       }
     }
 
-    // 3) Cloudflare interstitial / "verify you are human" / "just a moment"
+    // 3) Cloudflare interstitial / "verify you are human" / "just a moment".
+    // Only look at page chrome outside the chat transcript, so a model reply
+    // that happens to mention "rate limit" cannot pause automation.
     const pageText = document.body ? (document.body.innerText || '') : '';
     const phrases = [
       'verify you are human',
@@ -80,24 +100,23 @@
       'we need to verify',
       'rate limit exceeded',
       'too many requests',
-      'proof of work',
-      'cloudflare'
+      'proof of work'
     ];
-    for (const p of phrases) {
-      if (pageText.toLowerCase().includes(p)) {
-        // Must be prominent: either body is short (Cloudflare interstitial replaces the whole page),
-        // or an element with that text is visible and centrally placed.
-        if (document.body && document.body.innerText.trim().length < 2000) {
-          return `challenge page (${p})`;
-        }
-        // Look for a visible element containing this phrase
-        const elements = document.querySelectorAll('h1, h2, h3, p, div, span');
-        for (const e of elements) {
-          const t = (e.innerText || '').toLowerCase();
-          if (t.includes(p) && isElementVisible(e)) {
-            return `challenge text (${p})`;
-          }
-        }
+    const lowerPage = pageText.toLowerCase();
+    if (phrases.some((p) => lowerPage.includes(p))) {
+      const elements = document.querySelectorAll('h1, h2, h3, p, div, span, section, main');
+      for (const e of elements) {
+        if (e.closest('[data-perf-target="transcript"], [data-chat-message-id], [data-agent-transcript-message], [contenteditable="true"], [data-arena-helper]')) continue;
+        // Sidebar/history titles are page chrome but can contain words like
+        // "rate limit"; they are not a challenge.
+        if (e.closest('nav, aside, header, footer, [data-sidebar], [data-slot="sidebar"], [data-testid*="sidebar"], [class*="sidebar"]')) continue;
+        // Skip containers that wrap the chat itself; their text is the model's.
+        if (e.querySelector('[data-perf-target="transcript"], [data-chat-message-id], [contenteditable="true"]')) continue;
+        if (!isElementVisible(e)) continue;
+        const t = (e.innerText || '').toLowerCase();
+        if (!t || t.length > 2000) continue;
+        const phrase = phrases.find((p) => t.includes(p));
+        if (phrase) return `challenge text (${phrase})`;
       }
     }
 
@@ -118,7 +137,8 @@
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return false;
     const style = window.getComputedStyle(el);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (Number(style.opacity || 1) < 0.05) return false;
     return true;
   }
 
@@ -191,7 +211,9 @@
       fontSize: '14px',
       padding: '4px 6px'
     });
-    dismiss.addEventListener('click', () => { if (banner) banner.remove(); banner = null; });
+    // Dismissing the banner must also leave safe mode. Previously it only hid the
+    // banner, leaving auto-send/auto-continue disabled for the rest of the session.
+    dismiss.addEventListener('click', () => exitSafeMode('dismissed'));
     banner.appendChild(dismiss);
 
     document.body.appendChild(banner);

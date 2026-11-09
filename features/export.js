@@ -6,6 +6,10 @@
   const { on, ui } = window.ArenaHelper;
 
   function guessRole(el) {
+    // Arena's current transcript marks user turns explicitly.
+    if (el.querySelector && el.querySelector('[data-user-message-layout], [data-user-message-body-row]')) return 'user';
+    if (el.hasAttribute && el.hasAttribute('data-agent-transcript-message')) return 'assistant';
+
     const text = (el.getAttribute('data-role') || el.getAttribute('role') || '').toLowerCase();
     if (text.includes('user')) return 'user';
     if (text.includes('assistant') || text.includes('bot') || text.includes('ai')) return 'assistant';

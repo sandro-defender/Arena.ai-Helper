@@ -11,10 +11,12 @@
     maxQueueLength: 10,
     autoContinue: true,
     autoContinueMaxClicks: 3,
+    toolLimitAutoContinue: true,
     doneNotification: true,
     doneSound: true,
     autoFocus: true,
     showFloatingStatus: true,
+    showDebugOverlay: true,
     showCopyCode: true,
     showTimestamps: false,
     closeProtect: true,
@@ -33,8 +35,8 @@
       desc: 'All automation on: auto-scroll, auto-send, queue, auto-continue, notifications, focus, and close-protect. Captcha detection still pauses automation safely.',
       settings: {
         autoScroll: true, scrollPauseOnManualScroll: true, autoSend: true,
-        multiQueueEnabled: true, autoContinue: true, doneNotification: true,
-        doneSound: true, autoFocus: true, showFloatingStatus: true,
+        multiQueueEnabled: true, autoContinue: true, toolLimitAutoContinue: true,
+        doneNotification: true, doneSound: true, autoFocus: true, showFloatingStatus: true, showDebugOverlay: true,
         showCopyCode: true, showTimestamps: false, closeProtect: true
       }
     },
@@ -42,8 +44,8 @@
       desc: 'Normal chat mode: scrolling, copy-code, focus, and close protection on; sending, queueing, and auto-continue off.',
       settings: {
         autoScroll: true, scrollPauseOnManualScroll: true, autoSend: false,
-        multiQueueEnabled: false, autoContinue: false, doneNotification: false,
-        doneSound: false, autoFocus: true, showFloatingStatus: true,
+        multiQueueEnabled: false, autoContinue: false, toolLimitAutoContinue: false,
+        doneNotification: false, doneSound: false, autoFocus: true, showFloatingStatus: true, showDebugOverlay: true,
         showCopyCode: true, showTimestamps: false, closeProtect: true
       }
     },
@@ -51,8 +53,8 @@
       desc: 'All helper features off. Pure Arena experience.',
       settings: {
         autoScroll: false, scrollPauseOnManualScroll: false, autoSend: false,
-        multiQueueEnabled: false, autoContinue: false, doneNotification: false,
-        doneSound: false, autoFocus: false, showFloatingStatus: false,
+        multiQueueEnabled: false, autoContinue: false, toolLimitAutoContinue: false,
+        doneNotification: false, doneSound: false, autoFocus: false, showFloatingStatus: false, showDebugOverlay: false,
         showCopyCode: false, showTimestamps: false, closeProtect: false
       }
     }
@@ -60,8 +62,8 @@
 
   const boolIds = [
     'autoScroll', 'scrollPauseOnManualScroll', 'autoSend', 'multiQueueEnabled',
-    'autoContinue', 'doneNotification', 'doneSound', 'autoFocus',
-    'showFloatingStatus', 'showCopyCode', 'showTimestamps', 'closeProtect',
+    'autoContinue', 'toolLimitAutoContinue', 'doneNotification', 'doneSound', 'autoFocus',
+    'showFloatingStatus', 'showDebugOverlay', 'showCopyCode', 'showTimestamps', 'closeProtect',
     'perConversationSettings'
   ];
   const numberIds = ['autoSendDelayMs', 'maxQueueLength', 'autoContinueMaxClicks'];
@@ -71,10 +73,12 @@
     autoSend: 'Auto-send prompts',
     multiQueueEnabled: 'Enable multi-prompt queue',
     autoContinue: 'Auto-continue responses',
+    toolLimitAutoContinue: 'Auto-continue after tool-call limit',
     doneNotification: 'Show done notification',
     doneSound: 'Play done sound',
     autoFocus: 'Auto-focus chat input',
     showFloatingStatus: 'Show floating status pill',
+    showDebugOverlay: 'Show debug overlay (v3.0.1)',
     showCopyCode: 'Show copy-code buttons',
     showTimestamps: 'Show message timestamps',
     closeProtect: 'Protect against accidental close',
@@ -94,7 +98,7 @@
         return;
       }
       try {
-        chrome.tabs.sendMessage(tabs[0].id, message, (response) => {
+        chrome.tabs.sendMessage(tabs[0].id, message, { frameId: 0 }, (response) => {
           const err = chrome.runtime.lastError;
           if (callback) callback(response || null, err || null);
         });

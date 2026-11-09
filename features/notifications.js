@@ -13,7 +13,7 @@
     const hasQueued = runtime.queuedPrompts && runtime.queuedPrompts.length > 0;
     const input = ui.findChatInput();
     const hasInputText = input ? ui.getInputText(input).trim().length > 0 : false;
-    const stopping = settings.stopAfterThis === true;
+    const stopping = settings.stopAfterThis === true || runtime.suppressAutoThisTurn === true;
     // Notify only when the chain has fully stopped (no queued, no text in box, or stop-after-this is set).
     const chainDone = !hasQueued && !hasInputText;
     if (!chainDone && !stopping) return;

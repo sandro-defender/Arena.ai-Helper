@@ -53,8 +53,8 @@
   function attachAllFeatures() {
     // Order matters: scroll/queue/send first, then niceties.
     const order = [
-      'scroll', 'send', 'queue', 'continue', 'notifications', 'autofocus',
-      'copycode', 'timestamps', 'closeprotect', 'quickprompts', 'floatingstatus', 'counter', 'history', 'exportMd'
+      'scroll', 'send', 'queue', 'continue', 'toollimit', 'notifications', 'autofocus',
+      'copycode', 'timestamps', 'closeprotect', 'quickprompts', 'floatingstatus', 'counter', 'history', 'exportMd', 'debugoverlay'
     ];
     for (const name of order) {
       const f = features && features[name];

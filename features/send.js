@@ -2,6 +2,11 @@
  * When the assistant finishes and the Arena composer already has text, submit it.
  * Arena's current composer is a Tiptap/ProseMirror contenteditable div, so this
  * watches both native input events and editor DOM changes.
+ *
+ * Auto-send must only submit text that was written *while the model was busy*
+ * (or inserted programmatically by the queue / quick prompts). Typing at idle
+ * must never be submitted out from under the user. The `autoSendArmed` flag is
+ * set when a response finishes and cleared by any trusted idle typing.
  */
 (function () {
   'use strict';
@@ -13,8 +18,10 @@
     if (!settings.autoSend) return false;
     if (runtime.isAssistantResponding) return false;
     if (runtime.captchaDetected) return false;
+    if (runtime.paused) return false;
     if (Date.now() < runtime.sendCooldownUntil) return false;
     if (settings.stopAfterThis) return false;
+    if (runtime.suppressAutoThisTurn) return false;
     return true;
   }
 
@@ -25,7 +32,29 @@
     return evt;
   }
 
-  function tryAutoSend() {
+  function retrySubmit(text, attemptsLeft) {
+    if (attemptsLeft <= 0) return;
+    if (!canSendNow()) return;
+    const composer = ui.findChatInput();
+    if (!composer) return;
+    // Still holding exactly our text means Arena ignored the click (the editor
+    // re-rendered, or the button was not ready yet). Try once more.
+    if (ui.getInputText(composer).trim() !== text) return;
+    const prep = prepareForSend(composer);
+    if (prep.cancel) return;
+    const finalText = ui.getInputText(composer).trim();
+    if (!finalText) return;
+    if (ui.submitInput(composer)) {
+      emit('prompt:sent', { text: finalText, retry: true });
+      setTimeout(() => retrySubmit(finalText, attemptsLeft - 1), 1200);
+    }
+  }
+
+  // `force` is used by features that deliberately insert a prompt (queue,
+  // quick prompts). Normal auto-send additionally requires autoSendArmed.
+  function tryAutoSend(options) {
+    const force = !!(options && (options.force === true || options === true));
+    if (!force && !runtime.autoSendArmed) return false;
     if (!canSendNow()) return false;
     const input = ui.findChatInput();
     if (!input) return false;
@@ -64,16 +93,23 @@
       const sent = ui.submitInput(composer);
       if (sent) {
         emit('prompt:sent', { text: finalText });
+        runtime.autoSendArmed = false;
         runtime.lastSendHandledForText = '';
+        // Arena occasionally ignores the first programmatic click; retry if the
+        // composer still contains exactly the text we just tried to send.
+        setTimeout(() => retrySubmit(finalText, 2), 1200);
       } else {
         runtime.lastSendHandledForText = '';
         runtime.sendCooldownUntil = Date.now();
+        // Try again shortly in case the editor was mid-render.
+        setTimeout(() => retrySubmit(finalText, 2), 800);
       }
     }, delay);
     return true;
   }
 
   function scheduleAutoSend() {
+    if (!runtime.autoSendArmed) return;
     const composer = ui.findChatInput();
     if (!composer || !ui.getInputText(composer).trim()) return;
     clearTimeout(scheduleAutoSend.timer);
@@ -96,11 +132,22 @@
 
   // When a user types, debounce and try sending if idle. The same handler catches
   // input events dispatched by ui.setInputText for queue and quick-prompt inserts.
-  function onInputActivity() {
+  function onInputActivity(ev) {
     const { features } = window.ArenaHelper;
     if (features && features.scroll) features.scroll.schedule();
     watchComposer();
-    if (!runtime.isAssistantResponding) scheduleAutoSend();
+
+    if (runtime.isAssistantResponding) {
+      // Text typed while the model is streaming is the next prompt; it will be
+      // sent by the response:done handler.
+      return;
+    }
+    if (ev && ev.isTrusted) {
+      // The user is composing at idle. Never auto-submit their in-progress text.
+      runtime.autoSendArmed = false;
+      return;
+    }
+    scheduleAutoSend();
   }
 
   function checkExistingPrompt() {
@@ -115,9 +162,20 @@
     document.addEventListener('input', onInputActivity, true);
     watchComposer();
     setInterval(checkExistingPrompt, 1000);
-    on('response:done', () => {
+    on('response:started', () => {
+      runtime.autoSendArmed = false;
       watchComposer();
-      setTimeout(tryAutoSend, 250);
+    });
+    on('response:done', () => {
+      // Honor "stop after this" at the moment the response ends. queue.js clears
+      // the flag shortly after so the next turn behaves normally.
+      if (settings.stopAfterThis) {
+        runtime.autoSendArmed = false;
+        return;
+      }
+      runtime.autoSendArmed = true;
+      watchComposer();
+      setTimeout(() => tryAutoSend(), 250);
     });
   }
 

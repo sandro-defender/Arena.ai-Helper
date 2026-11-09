@@ -61,13 +61,18 @@
   }
 
   function onResponseDone() {
-    if (!settings.multiQueueEnabled) return;
+    // "Stop after this" must work even when the multi-prompt queue is disabled.
     if (settings.stopAfterThis) {
+      // Consume the one-shot setting immediately, but keep a runtime marker so
+      // every post-response automation (send, continue, tool-limit) is suppressed
+      // for this turn. The marker clears when the next response starts.
+      runtime.suppressAutoThisTurn = true;
       setSetting('stopAfterThis', false);
       runtime.queuedPrompts = [];
       emit('queue:updated', { count: 0 });
       return;
     }
+    if (!settings.multiQueueEnabled) return;
     // If input is empty (because the previous prompt was sent) and queue has items, push next one.
     const input = ui.findChatInput();
     if (!input) return;
@@ -83,7 +88,7 @@
     // send.features.send will pick it up via tryAutoSend
     const { features } = window.ArenaHelper;
     if (features && features.send) {
-      setTimeout(() => features.send.tryAutoSend(), 150);
+      setTimeout(() => features.send.tryAutoSend({ force: true }), 150);
     }
   }
 
@@ -120,6 +125,10 @@
   function attach() {
     on('prompt:prepare', onBeforeSend);
     on('response:done', onResponseDone);
+    on('response:started', () => {
+      // A new turn (usually the user's own prompt) re-enables automation.
+      runtime.suppressAutoThisTurn = false;
+    });
 
     // Listen for messages from background (shortcut commands)
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

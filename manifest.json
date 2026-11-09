@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Arena.ai Helper - Auto Scroll & Auto Send",
-  "version": "2.3.0",
-  "description": "Auto-scroll, auto-send queued prompts, auto-continue, quick prompts, captcha safety, export, shortcuts, and more for Arena.ai Agent Mode.",
+  "name": "Arena.ai Helper - Tool-Call Limit Auto-Continue",
+  "version": "3.0.1",
+  "description": "Adds automatic continuation when Arena's agent reaches the tool-call limit, plus all auto-scroll, auto-send, queue, captcha safety, export, and shortcut features.",
   "permissions": ["storage", "notifications", "scripting", "clipboardRead"],
   "background": {
     "service_worker": "background.js"
@@ -15,7 +15,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Arena.ai Helper",
+    "default_title": "Arena.ai Helper - Tool-Call Limit Auto-Continue",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -64,6 +64,7 @@
         "features/send.js",
         "features/queue.js",
         "features/continue.js",
+        "features/toollimit.js",
         "features/notifications.js",
         "features/autofocus.js",
         "features/export.js",
@@ -74,6 +75,7 @@
         "features/floatingstatus.js",
         "features/counter.js",
         "features/history.js",
+        "features/debugoverlay.js",
         "content.js"
       ],
       "run_at": "document_idle",

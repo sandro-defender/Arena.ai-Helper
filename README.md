@@ -1,6 +1,6 @@
-# Arena.ai Helper (v2.3)
+# Arena.ai Helper - Tool-Call Limit Auto-Continue (v3.0.1)
 
-A Chrome extension (Manifest V3) that turns [Arena.ai](https://arena.ai) Agent Mode into a hands-free, queueable assistant driver — with a built-in safety stop for captchas/rate-limit challenges.
+A Chrome extension (Manifest V3) that turns [Arena.ai](https://arena.ai) Agent Mode into a hands-free, queueable assistant driver — with a built-in safety stop for captchas/rate-limit challenges and automatic continuation when the agent reaches its tool-call limit.
 
 ## Logo
 Indigo rounded-square icon with a white down-arrow (auto-scroll metaphor), shipped at 16/32/48/128px for toolbar, Chrome Web Store, and notifications.
@@ -16,12 +16,14 @@ Indigo rounded-square icon with a white down-arrow (auto-scroll metaphor), shipp
 
 **Core**
 - **Auto-scroll to bottom** — prefers clicking Arena's native `aria-label="Scroll to bottom"` button when visible; otherwise falls back to its own scroll-container logic. Pauses only after a real manual scroll away from the latest message, so newly appearing native controls do not block automation.
-- **Auto-send** — submits text in the compose box as soon as the assistant finishes, keyed off `button[data-perf-target="send"]` and `aria-label="Send message"` (the exact Arena markup).
+- **Auto-send** — submits text that was typed while the assistant was answering (or inserted by the queue / a quick prompt) as soon as the response finishes, keyed off `button[data-perf-target="send"]` and `aria-label="Send message"` (the exact Arena markup). Typing at idle is never auto-submitted out from under you.
 - **Multi-prompt queue** — prompts separated by a configurable delimiter (default `---`) are sent one-by-one as each response finishes. The popup includes a live queue editor for reordering, editing, and removing pending work.
 - **Send delay / rate control** — choose the idle-to-send delay (0–30 seconds) for controlled hands-free runs.
 - **Auto-continue** — clicks "Continue generating" / "Read more" buttons, with a configurable per-response safety cap (including zero to disable clicks).
+- **Tool-call limit auto-continue** — watches the chat for “The agent reached the tool-call limit for this turn. Send a message to continue where it left off.” (and Arena's related “This turn ran long…” pause). When it appears, the helper automatically sends `continue` so the agent can resume. It only reacts to new limit messages (not old history), respects captchas and “stop after this”, and never overwrites text you are already typing.
+- **Task-result popup auto-continue** — when Arena asks “Was this task successful?” it clicks **Keep working**; when it asks “Does this complete your task?” it clicks **Making progress**. It never sends `continue` on top of an open popup.
 - **Configurable guardrails** — set a maximum pending-queue length (1–50). When a pasted queue exceeds it, automation does not send or discard the composer; you can edit it safely first.
-- **Stop-after-this-response** (`Alt+Shift+X`).
+- **Stop-after-this-response** (`Alt+Shift+X`) — one-shot: the current response finishes, then auto-send, auto-continue, and tool-limit replies are suppressed for that turn. The next turn you start manually returns to normal.
 
 **Feedback**
 - Desktop notification + chime when a chain finishes; distinct notification when a captcha is hit.
@@ -33,7 +35,7 @@ Indigo rounded-square icon with a white down-arrow (auto-scroll metaphor), shipp
 - Auto-focus input after responses, char/token counter, floating status pill (with clickable ■ Stop / ✕ Clear buttons), copy-code buttons, optional timestamps, close-protection.
 - **Live popup status** — see generating/idle/captcha state, queue count, safety notices, and recent activity for the active tab.
 - **Settings controls** — choose dark, light, or system popup appearance; optionally scope feature settings to the current Arena conversation; import/export settings and prompt templates as JSON.
-- **Activity history** — a recent, local-only log of sent prompts, response state, queue actions, guardrails, and captcha pauses.
+- **Debug overlay** — a transparent, resizable panel in the bottom-right corner shows a live log of all extension activity and console errors/warnings, with **Copy**, **Clear**, **Hide/Show**, and test buttons (**Send continue**, **Click Keep working**, **Run toollimit check**, **Force scroll**, **Stop after this**, **Clear input**, **Pause/Resume**). Displays the helper version in the header, is **draggable** by the title bar (position is saved), **auto-fits** to the viewport on window resize, and captures extension events for easy troubleshooting. The **Pause** button globally halts all automation (auto-scroll, auto-send, auto-continue, tool-limit replies) until resumed.
 - Three one-click profiles: **Hands-free**, **Chat**, **Off**.
 - Export conversation to Markdown.
 
@@ -43,7 +45,7 @@ Indigo rounded-square icon with a white down-arrow (auto-scroll metaphor), shipp
 
 1. Open Chrome (or any Chromium-based browser: Edge, Brave, Arc, etc.) and navigate to `chrome://extensions`.
 2. Toggle **Developer mode** on (top-right).
-3. Click **Load unpacked** and select this folder (`Arena.ai-Helper`).
+3. Click **Load unpacked** and select this folder (`arena-ai-helper-toolcall-continue`).
 4. Pin the extension for quick access.
 5. Open or refresh `https://arena.ai` (or any Arena agent-mode / E2B-hosted preview page).
 
@@ -74,16 +76,17 @@ features/*.js           One file per feature (see below)
 icons/                  Toolbar icons
 ```
 
-Feature modules under `features/`: `scroll.js`, `send.js`, `queue.js`, `continue.js`, `notifications.js`, `autofocus.js`, `export.js`, `copycode.js`, `timestamps.js`, `closeprotect.js`, `quickprompts.js`, `floatingstatus.js`, and `history.js`. Each exposes an `attach()` function called by `content.js`.
+Feature modules under `features/`: `scroll.js`, `send.js`, `queue.js`, `continue.js`, `toollimit.js`, `notifications.js`, `autofocus.js`, `export.js`, `copycode.js`, `timestamps.js`, `closeprotect.js`, `quickprompts.js`, `floatingstatus.js`, and `history.js`. Each exposes an `attach()` function called by `content.js`.
 
 ## Notes & caveats
 
-- Arena's DOM can change; selectors are intentionally heuristic (looking for overflow scroll containers, visible textareas/contenteditables, and buttons whose labels/accessible names contain "send" / "continue" / "stop") rather than hard-coded class names. If the send button isn't found, the extension falls back to dispatching an `Enter` key event on the input.
+- Arena's DOM can change; selectors are intentionally heuristic (looking for the visible transcript, its custom scroll container, visible textareas/contenteditables, and buttons whose labels/accessible names contain "send" / "continue" / "stop") rather than hard-coded class names. If the send button isn't found, the extension falls back to dispatching an `Enter` key event on the input.
 - Host permissions include `arena.ai`, `*.arena.ai`, and `*.e2b.app`/`*.e2b.dev` so the helper also works inside Arena-hosted preview sandboxes.
-- Auto-send has a per-attempt cooldown and debounces typing to avoid firing while you're still composing.
+- Auto-send has a per-attempt cooldown, retries once if Arena ignores a programmatic click, and never auto-submits text you are typing while idle.
 - Auto-continue is capped at 3 clicks per response by default (configurable via the `autoContinueMaxClicks` setting, exposed in code) to prevent infinite loops if a UI element is misidentified.
-- Conversation export uses a best-effort role detector (looks at `data-role`, class names, presence of code blocks, and falls back to alternating user/assistant). For critical records, double-check the resulting Markdown.
-- Auto-scroll prefers clicking Arena's native **"Scroll to bottom"** floating button (`aria-label="Scroll to bottom"`) when it's visible — that uses Arena's own scroll target and is the smoothest behavior. The manual scroll fallback only kicks in when that button isn't on screen.
+- Tool-call limit auto-continue sends a short `continue` message, has a 4-second minimum gap between automatic replies, and treats limit messages already on screen when the page loads as history. If you want a different reply, change `REPLY_TEXT` in `features/toollimit.js`.
+- Conversation export uses Arena's `data-user-message-layout` marker for user turns and `data-agent-transcript-message` for assistant turns, then falls back to the older best-effort heuristics. For critical records, double-check the resulting Markdown.
+- Auto-scroll prefers clicking Arena's native **"Scroll to bottom"** floating button (`aria-label="Scroll to bottom"`) when it's visible. Otherwise it scrolls the transcript's `data-custom-scrollbar` / `role="log"` element, refreshing the container after SPA navigation.
 
 ## Releases (GitHub zip)
 

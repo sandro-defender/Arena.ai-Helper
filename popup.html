@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Arena.ai Helper</title>
+    <title>Arena.ai Helper - Tool-Call Limit Auto-Continue v3.0.0</title>
     <style>
       * { box-sizing: border-box; }
       body {
@@ -232,7 +232,7 @@
     </style>
   </head>
   <body>
-    <h1><span class="logo" aria-hidden="true"></span> Arena.ai Helper <span style="color:var(--subtle);font-weight:400;font-size:11px;" id="verLabel">v2</span></h1>
+    <h1><span class="logo" aria-hidden="true"></span> Arena.ai Helper · Tool Limit <span style="color:var(--subtle);font-weight:400;font-size:11px;" id="verLabel">v2.4</span></h1>
 
     <div class="profiles" id="profiles" aria-label="Automation profiles">
       <button type="button" class="profile" data-profile="handsfree">🤖 Hands-free</button>
@@ -287,6 +287,10 @@
       <div class="label">Auto-continue<div class="desc">Click “Continue generating” automatically.</div></div>
       <label class="switch"><input type="checkbox" id="autoContinue" /><span class="slider"></span></label>
     </div>
+    <div class="row">
+      <div class="label">Tool-call limit auto-continue<div class="desc">When the agent says it reached the tool-call limit, send “continue” automatically.</div></div>
+      <label class="switch"><input type="checkbox" id="toolLimitAutoContinue" /><span class="slider"></span></label>
+    </div>
 
     <h2>Safety limits</h2>
     <div class="row">
@@ -316,6 +320,10 @@
     <div class="row">
       <div class="label">Floating status pill<div class="desc">Shows state in the page corner.</div></div>
       <label class="switch"><input type="checkbox" id="showFloatingStatus" /><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <div class="label">Debug overlay<div class="desc">Transparent log panel with test buttons and pause control.</div></div>
+      <label class="switch"><input type="checkbox" id="showDebugOverlay" /><span class="slider"></span></label>
     </div>
     <div class="row">
       <div class="label">Copy-code buttons<div class="desc">Add a “Copy” button to each code block.</div></div>

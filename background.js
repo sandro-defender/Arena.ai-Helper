@@ -9,7 +9,7 @@ function sendToActiveTab(message) {
     const tab = tabs[0];
     if (!tab.id) return;
     try {
-      chrome.tabs.sendMessage(tab.id, message, () => void chrome.runtime.lastError);
+      chrome.tabs.sendMessage(tab.id, message, { frameId: 0 }, () => void chrome.runtime.lastError);
     } catch (e) { /* ignore */ }
   });
 }

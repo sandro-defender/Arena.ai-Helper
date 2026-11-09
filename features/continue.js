@@ -8,7 +8,7 @@
 
   function attemptContinue() {
     if (!settings.autoContinue) return false;
-    if (settings.stopAfterThis) return false;
+    if (settings.stopAfterThis || runtime.suppressAutoThisTurn || runtime.paused) return false;
     if (runtime.captchaDetected || runtime.isAssistantResponding) return false;
     const maxClicks = Number.isFinite(Number(settings.autoContinueMaxClicks))
       ? Math.max(0, Number(settings.autoContinueMaxClicks)) : 3;

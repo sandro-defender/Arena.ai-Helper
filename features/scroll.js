@@ -10,9 +10,42 @@
   let scheduled = false;
   let scrollListenerContainer = null;
   let autoScrollUntil = 0;
+  let lastUrl = location.href;
+
+  function visibleTranscript() {
+    const all = document.querySelectorAll('[data-perf-target="transcript"]');
+    for (const t of all) {
+      if (ui.isVisible(t)) return t;
+    }
+    return all.length ? all[0] : null;
+  }
+
+  function containerStillValid() {
+    if (!chatContainer || !document.contains(chatContainer)) return false;
+    // Arena is an SPA: after navigation a new transcript/scroll viewport is
+    // mounted, while the old element can still be attached in a hidden view.
+    const transcript = visibleTranscript();
+    if (transcript) {
+      const log = transcript.querySelector('[data-custom-scrollbar="true"], [role="log"]');
+      if (log) return log === chatContainer;
+      const viewport = transcript.closest('[data-radix-scroll-area-viewport]');
+      if (viewport) return viewport === chatContainer;
+    }
+    return true;
+  }
+
+  function refreshForNavigation() {
+    if (location.href === lastUrl) return false;
+    lastUrl = location.href;
+    chatContainer = null;
+    runtime.userScrolledUp = false;
+    ensureContainer();
+    return true;
+  }
 
   function ensureContainer() {
-    if (!chatContainer || !document.contains(chatContainer)) {
+    refreshForNavigation();
+    if (!containerStillValid()) {
       chatContainer = ui.findChatContainer();
       attachContainerScroll();
     }
@@ -20,6 +53,8 @@
   }
 
   function schedule() {
+    refreshForNavigation();
+    if (runtime.paused) return;
     if (!settings.autoScroll || scheduled) return;
     scheduled = true;
     requestAnimationFrame(() => {
@@ -36,6 +71,7 @@
   }
 
   function run(smooth = true) {
+    if (runtime.paused) return;
     if (!settings.autoScroll) return;
     if (settings.scrollPauseOnManualScroll && runtime.userScrolledUp) return;
 
@@ -84,6 +120,10 @@
 
   function attach() {
     window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('popstate', () => {
+      lastUrl = '';
+      refreshForNavigation();
+    });
     ensureContainer();
     setTimeout(ensureContainer, 1500);
     setTimeout(ensureContainer, 5000);
@@ -91,7 +131,8 @@
     // Schedule a run when Arena adds message content or its native scroll control.
     // Respect a genuine manual pause; otherwise the new control is clicked by run().
     const observer = new MutationObserver(() => {
-      if (settings.autoScroll && !runtime.userScrolledUp) schedule();
+      refreshForNavigation();
+      if (!runtime.paused && settings.autoScroll && !runtime.userScrolledUp) schedule();
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
@@ -101,8 +142,8 @@
     run(false);
   }
 
-  on('response:started', schedule);
-  on('response:done', () => run(false));
+  on('response:started', () => { if (!runtime.paused) schedule(); });
+  on('response:done', () => { if (!runtime.paused) run(false); });
 
   window.ArenaHelper.features = window.ArenaHelper.features || {};
   window.ArenaHelper.features.scroll = { schedule, run, forceScroll, attach };

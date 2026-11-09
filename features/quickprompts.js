@@ -149,12 +149,20 @@
     const inp = findInput();
     if (!inp) return;
     const c = window.ArenaHelper.theme.themeColors();
+    const rect = inp.getBoundingClientRect();
+    const width = Math.max(200, Math.min(360, window.innerWidth - 16));
+    const maxHeight = Math.max(120, Math.min(360, window.innerHeight - 16));
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    const spaceAbove = rect.top - 8;
+    const top = spaceAbove >= 200
+      ? Math.max(8, rect.top - Math.min(maxHeight, spaceAbove) - 8)
+      : Math.min(window.innerHeight - maxHeight - 8, rect.bottom + 8);
     popover = document.createElement('div');
     popover.setAttribute('data-arena-helper', 'quickprompts-popover');
     Object.assign(popover.style, {
-      position: 'absolute',
-      bottom: '44px',
-      left: '8px',
+      position: 'fixed',
+      top: `${Math.max(8, top)}px`,
+      left: `${left}px`,
       background: c.bgSolid,
       color: c.fg,
       border: `1px solid ${c.border}`,
@@ -162,9 +170,9 @@
       boxShadow: '0 10px 30px rgba(0,0,0,0.18)',
       zIndex: 1000,
       padding: '8px',
-      minWidth: '280px',
-      maxWidth: '360px',
-      maxHeight: '360px',
+      minWidth: `${Math.min(280, width)}px`,
+      maxWidth: `${width}px`,
+      maxHeight: `${maxHeight}px`,
       overflowY: 'auto',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       fontSize: '13px'
@@ -231,7 +239,8 @@
   }
 
   function outsideClick(ev) {
-    if (popover && !popover.contains(ev.target) && ev.target !== button) closePopover();
+    if (!popover) return;
+    if (!popover.contains(ev.target) && ev.target !== button) closePopover();
     else document.addEventListener('click', outsideClick, { once: true });
   }
 
@@ -281,7 +290,7 @@
         if (runtime.captchaDetected) return;
         if (runtime.isAssistantResponding) return;
         if (!settings.autoSend) return;
-        if (features && features.send) features.send.tryAutoSend();
+        if (features && features.send) features.send.tryAutoSend({ force: true });
       }, 250);
     } else if (inp.tagName === 'TEXTAREA') {
       // Move caret to end
