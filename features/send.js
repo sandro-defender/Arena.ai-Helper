@@ -97,7 +97,7 @@
         runtime.lastSendHandledForText = '';
         // Arena occasionally ignores the first programmatic click; retry if the
         // composer still contains exactly the text we just tried to send.
-        setTimeout(() => retrySubmit(finalText, 2), 1200);
+        setTimeout(() => retrySubmit(finalText, 2), 2000);
       } else {
         runtime.lastSendHandledForText = '';
         runtime.sendCooldownUntil = Date.now();

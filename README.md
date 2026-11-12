@@ -1,3 +1,7 @@
+# ⚠️ PROJECT STOPPED / CLOSED
+
+> **This project is no longer maintained.** Arena.ai has added rate limits and usage restrictions that prevent the helper from working reliably, so active development has stopped. The code remains available as-is for reference, but no new features or fixes will be added.
+
 # Arena.ai Helper - Tool-Call Limit Auto-Continue (v3.0.1)
 
 A Chrome extension (Manifest V3) that turns [Arena.ai](https://arena.ai) Agent Mode into a hands-free, queueable assistant driver — with a built-in safety stop for captchas/rate-limit challenges and automatic continuation when the agent reaches its tool-call limit.
@@ -76,7 +80,7 @@ features/*.js           One file per feature (see below)
 icons/                  Toolbar icons
 ```
 
-Feature modules under `features/`: `scroll.js`, `send.js`, `queue.js`, `continue.js`, `toollimit.js`, `notifications.js`, `autofocus.js`, `export.js`, `copycode.js`, `timestamps.js`, `closeprotect.js`, `quickprompts.js`, `floatingstatus.js`, and `history.js`. Each exposes an `attach()` function called by `content.js`.
+Feature modules under `features/`: `scroll.js`, `send.js`, `queue.js`, `continue.js`, `toollimit.js`, `notifications.js`, `autofocus.js`, `export.js`, `copycode.js`, `timestamps.js`, `closeprotect.js`, `quickprompts.js`, `history.js`, and `debugoverlay.js`. Each exposes an `attach()` function called by `content.js`.
 
 ## Notes & caveats
 
