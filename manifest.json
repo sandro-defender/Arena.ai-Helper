@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Arena.ai Helper - Tool-Call Limit Auto-Continue",
-  "version": "3.0.1",
+  "version": "3.1.5",
   "description": "Adds automatic continuation when Arena's agent reaches the tool-call limit, plus all auto-scroll, auto-send, queue, captcha safety, export, and shortcut features.",
   "permissions": ["storage", "notifications", "scripting", "clipboardRead"],
   "background": {
@@ -72,7 +72,6 @@
         "features/timestamps.js",
         "features/closeprotect.js",
         "features/quickprompts.js",
-        "features/floatingstatus.js",
         "features/counter.js",
         "features/history.js",
         "features/debugoverlay.js",

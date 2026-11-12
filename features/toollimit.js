@@ -100,6 +100,10 @@
   //   "Does this complete your task?" -> Yes / No / Making progress
   // Click the "keep going" action so the agent continues instead of stopping.
   const DIALOG_QUESTION_RE = /(was this task successful|does this complete your task|does this complete the task)/i;
+
+  // Arena sometimes shows "Reconnect to continue this chat." with a
+  // "Reconnect" button. Click it automatically so the chat resumes.
+  const RECONNECT_RE = /reconnect\s+to\s+continue\s+this\s+chat/i;
   const DIALOG_ACTIONS = ['keep working', 'making progress'];
 
   function dialogActionLabel(control) {
@@ -168,7 +172,7 @@
 
   function clickKeepWorking(button) {
     if (!settings.toolLimitAutoContinue) return false;
-    if (runtime.captchaDetected || settings.stopAfterThis || runtime.suppressAutoThisTurn) return false;
+    if (runtime.captchaDetected || settings.stopAfterThis || runtime.suppressAutoThisTurn || runtime.paused) return false;
 
     if (!button) {
       lastKeepWorkingButton = null;
@@ -186,6 +190,38 @@
     emit('tool-limit:keep-working', {});
     recordActivity('Tool-limit auto-continue', 'Clicked the continue action in the task-result popup.');
     return true;
+  }
+
+  // Arena sometimes shows "Reconnect to continue this chat." with a
+  // "Reconnect" button. Click it automatically so the chat resumes.
+  let lastReconnectAt = 0;
+  function clickReconnect() {
+    if (!settings.toolLimitAutoContinue) return false;
+    if (runtime.captchaDetected || settings.stopAfterThis || runtime.suppressAutoThisTurn || runtime.paused) return false;
+    if (Date.now() - lastReconnectAt < 5000) return false;
+
+    const controls = document.querySelectorAll('button, [role="button"], a');
+    for (const control of controls) {
+      if (!ui.isVisible(control) || ui.isControlDisabled(control)) continue;
+      const label = normalizeText(control.innerText || control.textContent).toLowerCase();
+      if (label !== 'reconnect' && !label.startsWith('reconnect')) continue;
+
+      // Only click inside a "Reconnect to continue this chat" context.
+      let scope = control.parentElement;
+      for (let i = 0; i < 12 && scope; i++) {
+        const text = normalizeText(scope.innerText || scope.textContent);
+        if (text.length <= 500 && RECONNECT_RE.test(text)) {
+          lastReconnectAt = Date.now();
+          try { control.click(); } catch (e) { return false; }
+          emit('tool-limit:reconnect', {});
+          recordActivity('Tool-limit auto-continue', 'Clicked "Reconnect" to resume the chat.');
+          return true;
+        }
+        if (scope === document.body) break;
+        scope = scope.parentElement;
+      }
+    }
+    return false;
   }
 
   function primeContainer(container, raw) {
@@ -261,9 +297,9 @@
       const text = ui.getInputText(composer).trim();
       if (!text) {
         // Some editors ignore the first programmatic insert while they re-render.
-        if (attempt < 2) {
+        if (attempt < 5) {
           insertReply(composer);
-          setTimeout(() => trySubmit(attempt + 1), 300);
+          setTimeout(() => trySubmit(attempt + 1), 2000);
         } else {
           sending = false;
         }
@@ -276,15 +312,61 @@
         return;
       }
 
-      const sent = ui.submitInput(composer);
+      // Wait for the send button to become enabled before submitting.
+      const sendBtn = ui.findArenaSendButton(document);
+      if (sendBtn && ui.isControlDisabled(sendBtn)) {
+        if (attempt < 5) {
+          setTimeout(() => trySubmit(attempt + 1), 2000);
+        } else {
+          sending = false;
+        }
+        return;
+      }
+
+      let sent = false;
+      // Primary: simulate pressing Enter (most reliable for Tiptap/ProseMirror).
+      try {
+        composer.focus();
+        const opts = { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true, cancelable: true };
+        composer.dispatchEvent(new KeyboardEvent('keydown', opts));
+        composer.dispatchEvent(new KeyboardEvent('keypress', opts));
+        composer.dispatchEvent(new KeyboardEvent('keyup', opts));
+        sent = true;
+      } catch (e) { sent = false; }
+
       if (!sent) {
-        sending = false;
+        // Fallback: try the send button.
+        try { sent = ui.submitInput(composer); } catch (e) { sent = false; }
+      }
+      if (!sent) {
+        // Last resort: click the send button directly.
+        try {
+          const btn = ui.findArenaSendButton(document);
+          if (btn) { btn.click(); sent = true; }
+        } catch (e) { sent = false; }
+      }
+      if (!sent) {
+        // Fallback: dispatch Enter key event.
+        try {
+          const opts = { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true, cancelable: true };
+          composer.dispatchEvent(new KeyboardEvent('keydown', opts));
+          composer.dispatchEvent(new KeyboardEvent('keypress', opts));
+          composer.dispatchEvent(new KeyboardEvent('keyup', opts));
+          sent = true;
+        } catch (e) { sent = false; }
+      }
+      if (!sent) {
+        if (attempt < 5) {
+          setTimeout(() => trySubmit(attempt + 1), 2000);
+        } else {
+          sending = false;
+        }
         return;
       }
 
       markHandled(total, occurrence);
       lastSentAt = Date.now();
-      runtime.sendCooldownUntil = Date.now() + 1500;
+      runtime.sendCooldownUntil = Date.now() + 2000;
       emit('tool-limit:continued', { text: REPLY_TEXT, count: total });
       recordActivity('Tool-limit auto-continue', `Detected the tool-call limit message and sent "${REPLY_TEXT}".`);
 
@@ -297,7 +379,7 @@
           if (failedSendRetries <= 3) {
             handledTotalCount = 0;
             handledOccurrences = new WeakMap();
-            scheduleCheck(800);
+            scheduleCheck(2000);
           } else {
             // Stop retrying this occurrence; the user can send manually.
             markHandled(total, occurrence);
@@ -305,12 +387,11 @@
         } else {
           failedSendRetries = 0;
         }
+        sending = false;
       }, 2000);
-
-      sending = false;
     };
 
-    setTimeout(() => trySubmit(0), 350);
+    setTimeout(() => trySubmit(0), 2000);
   }
 
   function check() {
@@ -325,6 +406,9 @@
       return;
     }
     if (isTaskDialogOpen()) return;
+
+    // Reconnect prompt: click "Reconnect" if present.
+    if (clickReconnect()) return;
 
     if (sending) return;
 
@@ -369,6 +453,9 @@
     if (!shouldContinue) return;
 
     emit('tool-limit:detected', { count: total, text: occurrence.text.slice(0, 80) });
+    if (window.ArenaHelper.features && window.ArenaHelper.features.debugoverlay) {
+      window.ArenaHelper.features.debugoverlay.addLog('info', 'Limit detected, sending "' + REPLY_TEXT + '" (attempt ' + (failedSendRetries + 1) + ')');
+    }
 
     const input = ui.findChatInput();
     if (!input) return;

@@ -54,7 +54,7 @@
     // Order matters: scroll/queue/send first, then niceties.
     const order = [
       'scroll', 'send', 'queue', 'continue', 'toollimit', 'notifications', 'autofocus',
-      'copycode', 'timestamps', 'closeprotect', 'quickprompts', 'floatingstatus', 'counter', 'history', 'exportMd', 'debugoverlay'
+      'copycode', 'timestamps', 'closeprotect', 'quickprompts', 'counter', 'history', 'exportMd', 'debugoverlay'
     ];
     for (const name of order) {
       const f = features && features[name];
@@ -76,6 +76,25 @@
     setTimeout(() => {
       if (runtime.hasChatUi && features && features.scroll) features.scroll.forceScroll();
     }, 500);
+
+    // Auto-refresh the page if nothing has changed for 10 minutes.
+    if (!settings.autoReloadOnIdle) return;
+    let lastActivity = Date.now();
+    function markActivity() { lastActivity = Date.now(); }
+    document.addEventListener('scroll', markActivity, true);
+    document.addEventListener('click', markActivity, true);
+    document.addEventListener('keydown', markActivity, true);
+    document.addEventListener('mousemove', markActivity, true);
+    // Also count assistant response activity as activity.
+    on('response:started', markActivity);
+    on('response:done', markActivity);
+    setInterval(() => {
+      const idleMs = Date.now() - lastActivity;
+      if (settings.autoReloadOnIdle && idleMs >= 10 * 60 * 1000) {
+        try { if (window.ArenaHelper.features && window.ArenaHelper.features.debugoverlay) window.ArenaHelper.features.debugoverlay.addLog('info', 'No activity for 10 minutes — refreshing page'); } catch (e) {}
+        location.reload();
+      }
+    }, 30000);
   }
 
   if (document.readyState === 'loading') {
